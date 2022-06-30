@@ -44,12 +44,14 @@ set_environment(args.cuda)
 
 def main():
     dev_itr = TaTQATestBatchGen(args, data_mode="dev", encoder=args.encoder)
-    # test_itr = TaTQATestBatchGen(args, data_mode="test", encoder=args.encoder)
+    test_itr = TaTQATestBatchGen(args, data_mode="test", encoder=args.encoder)
 
     if args.encoder == 'roberta':
         bert_model = RobertaModel.from_pretrained(args.roberta_model)
     elif args.encoder == 'bert':
         bert_model = BertModel.from_pretrained('bert-large-uncased')
+    elif args.encoder == 'tapex':
+        bert_model = RobertaModel.from_pretrained('dataset_tagop/tapex.large')
 
     if args.ablation_mode == 0:
         operators = [1 for _ in range(10)]
@@ -82,20 +84,20 @@ def main():
     )
     network.load_state_dict(torch.load(os.path.join(args.model_path,"checkpoint_best.pt")))
     model = TagopPredictModel(args, network)
-    logger.info("Below are the result on Dev set...")
-    model.reset()
-    model.avg_reset()
-    pred_json = model.predict(dev_itr)
-    json.dump(pred_json,open(os.path.join(args.save_dir, 'pred_result_on_dev.json'), 'w'))
-    model.get_metrics()
-
-    # logger.info("===========")
-    # logger.info("Below are the result on Test set...")
+    # logger.info("Below are the result on Dev set...")
     # model.reset()
     # model.avg_reset()
-    # pred_json = model.predict(test_itr)
-    # json.dump(pred_json, open(os.path.join(args.save_dir, 'pred_result_on_test.json'),'w'))
+    # pred_json = model.predict(dev_itr)
+    # json.dump(pred_json,open(os.path.join(args.save_dir, 'pred_result_on_dev.json'), 'w'))
     # model.get_metrics()
+
+    # logger.info("===========")
+    logger.info("Below are the result on Test set...")
+    model.reset()
+    model.avg_reset()
+    pred_json = model.predict(test_itr)
+    json.dump(pred_json, open(os.path.join(args.save_dir, 'pred_result_on_test.json'),'w'))
+    model.get_metrics()
 
 
 if __name__ == "__main__":

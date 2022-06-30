@@ -19,6 +19,9 @@ args = parser.parse_args()
 if args.encoder == 'roberta':
     tokenizer = RobertaTokenizer.from_pretrained(args.input_path + "/roberta.large")
     sep = '<s>'
+elif args.encoder == 'tapex':
+    tokenizer = RobertaTokenizer.from_pretrained(args.input_path + "/roberta.large")
+    sep = 'col :'
 elif args.encoder == 'bert':
     tokenizer = BertTokenizer.from_pretrained('bert-large-uncased')
     sep = '[SEP]'

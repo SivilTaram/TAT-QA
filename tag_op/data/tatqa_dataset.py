@@ -562,11 +562,11 @@ def _concat(question_ids,
             paragraph_tags,
             paragraph_index,
             paragraph_number_value,
-            sep_start,
-            sep_end,
+            sep_special,
+            sep_normal,
             question_length_limitation,
             passage_length_limitation,
-            max_pieces,):
+            max_pieces, ):
     in_table_cell_index = table_cell_index.copy()
     in_paragraph_index = paragraph_index.copy()
     input_ids = torch.zeros([1, max_pieces])
@@ -580,7 +580,7 @@ def _concat(question_ids,
     if question_length_limitation is not None:
         if len(question_ids) > question_length_limitation:
             question_ids = question_ids[:question_length_limitation]
-    question_ids = [sep_start] + question_ids + [sep_end]
+    question_ids = question_ids + sep_special
     question_length = len(question_ids)
     table_length = len(table_ids)
     paragraph_length = len(paragraph_ids)
@@ -590,18 +590,16 @@ def _concat(question_ids,
             table_length = passage_length_limitation
             paragraph_length = 0
         elif len(table_ids) + len(paragraph_ids) > passage_length_limitation:
-            passage_ids = table_ids + [sep_end] + paragraph_ids
+            passage_ids = table_ids + sep_normal + paragraph_ids
             passage_ids = passage_ids[:passage_length_limitation]
             table_length = len(table_ids)
             paragraph_length = passage_length_limitation - table_length
         else:
-            passage_ids = table_ids + [sep_end] + paragraph_ids
+            passage_ids = table_ids + sep_normal + paragraph_ids
             table_length = len(table_ids)
             paragraph_length = len(paragraph_ids) + 1
     else:
-        passage_ids = table_ids + [sep_end] + paragraph_ids
-
-    passage_ids = passage_ids + [sep_end]
+        passage_ids = table_ids + sep_normal + paragraph_ids
 
     input_ids[0, :question_length] = torch.from_numpy(np.array(question_ids))
     input_ids[0, question_length:question_length + len(passage_ids)] = torch.from_numpy(np.array(passage_ids))
@@ -623,19 +621,19 @@ def _concat(question_ids,
            table_mask, table_cell_number_value, table_index, tags, input_segments
 
 def _test_concat(question_ids,
-                table_ids,
-                table_tags,
-                table_cell_index,
-                table_cell_number_value,
-                paragraph_ids,
-                paragraph_tags,
-                paragraph_index,
-                paragraph_number_value,
-                sep_start,
-                sep_end,
-                question_length_limitation,
-                passage_length_limitation,
-                max_pieces,):
+                 table_ids,
+                 table_tags,
+                 table_cell_index,
+                 table_cell_number_value,
+                 paragraph_ids,
+                 paragraph_tags,
+                 paragraph_index,
+                 paragraph_number_value,
+                 sep_special,
+                 sep_normal,
+                 question_length_limitation,
+                 passage_length_limitation,
+                 max_pieces, ):
     in_table_cell_index = table_cell_index.copy()
     in_paragraph_index = paragraph_index.copy()
     input_ids = torch.zeros([1, max_pieces])
@@ -649,7 +647,8 @@ def _test_concat(question_ids,
     if question_length_limitation is not None:
         if len(question_ids) > question_length_limitation:
             question_ids = question_ids[:question_length_limitation]
-    question_ids = [sep_start] + question_ids + [sep_end]
+    # special token after question_ids
+    question_ids = question_ids + sep_special
     question_length = len(question_ids)
     table_length = len(table_ids)
     paragraph_length = len(paragraph_ids)
@@ -659,18 +658,16 @@ def _test_concat(question_ids,
             table_length = passage_length_limitation
             paragraph_length = 0
         elif len(table_ids) + len(paragraph_ids) > passage_length_limitation:
-            passage_ids = table_ids + [sep_end] + paragraph_ids
+            passage_ids = table_ids + sep_normal + paragraph_ids
             passage_ids = passage_ids[:passage_length_limitation]
             table_length = len(table_ids)
             paragraph_length = passage_length_limitation - table_length
         else:
-            passage_ids = table_ids + [sep_end] + paragraph_ids
+            passage_ids = table_ids + sep_normal + paragraph_ids
             table_length = len(table_ids)
             paragraph_length = len(paragraph_ids) + 1
     else:
-        passage_ids = table_ids + [sep_end] + paragraph_ids
-
-    passage_ids = passage_ids + [sep_end]
+        passage_ids = table_ids + sep_normal + paragraph_ids
 
     input_ids[0, :question_length] = torch.from_numpy(np.array(question_ids))
     input_ids[0, question_length:question_length + len(passage_ids)] = torch.from_numpy(np.array(passage_ids))
@@ -719,8 +716,12 @@ class TagTaTQAReader(object):
         self.tokenizer = tokenizer
         self.passage_length_limit = passage_length_limit
         self.question_length_limit = question_length_limit
-        self.sep_start = self.tokenizer._convert_token_to_id(sep)
-        self.sep_end = self.tokenizer._convert_token_to_id(sep)
+        if " " in sep:
+            self.sep_special = self.tokenizer.convert_tokens_to_ids(sep.split(" "))
+        else:
+            self.sep_special = [self.tokenizer._convert_token_to_id(sep)]
+        # default for RoBERTa
+        self.sep_normal = [2]
         tokens = self.tokenizer._tokenize("Feb 2 Nov")
         self.skip_count = 0
         self.op_mode=op_mode
@@ -791,7 +792,7 @@ class TagTaTQAReader(object):
         table_mask, table_number_value, table_index, tags, token_type_ids = \
             _concat(question_ids, table_ids, table_tags, table_cell_index, table_cell_number_value,
                     paragraph_ids, paragraph_tags, paragraph_index, paragraph_number_value,
-                    self.sep_start, self.sep_end, self.question_length_limit,
+                    self.sep_special, self.sep_normal, self.question_length_limit,
                     self.passage_length_limit, self.max_pieces)
         answer_dict = {"answer_type": answer_type, "answer": answer, "scale": scale, "answer_from": answer_from}
         return self._make_instance(input_ids, attention_mask, token_type_ids, paragraph_mask, table_mask,
@@ -802,7 +803,7 @@ class TagTaTQAReader(object):
 
     def _read(self, file_path: str):
         print("Reading file at %s", file_path)
-        with open(file_path) as dataset_file:
+        with open(file_path, encoding="utf8") as dataset_file:
             dataset = json.load(dataset_file)
         instances = []
         key_error_count = 0
@@ -852,8 +853,12 @@ class TagTaTQATestReader(object):
         self.tokenizer = tokenizer
         self.passage_length_limit = passage_length_limit
         self.question_length_limit = question_length_limit
-        self.sep_start = self.tokenizer._convert_token_to_id(sep)
-        self.sep_end = self.tokenizer._convert_token_to_id(sep)
+        if " " in sep:
+            self.sep_special = self.tokenizer.convert_tokens_to_ids(sep.split(" "))
+        else:
+            self.sep_special = [self.tokenizer._convert_token_to_id(sep)]
+        # default for RoBERTa
+        self.sep_normal = [2]
         tokens = self.tokenizer._tokenize("Feb 2 Nov")
         self.skip_count = 0
         self.ablation_mode = ablation_mode
@@ -944,9 +949,9 @@ class TagTaTQATestReader(object):
         input_ids, attention_mask, paragraph_mask, paragraph_number_value, paragraph_index, \
         table_mask, table_number_value, table_index, tags, token_type_ids = \
             _test_concat(question_ids, table_ids, table_tags, table_cell_index, table_cell_number_value,
-                    paragraph_ids, paragraph_tags, paragraph_index, paragraph_number_value,
-                    self.sep_start, self.sep_end, self.question_length_limit,
-                    self.passage_length_limit, self.max_pieces)
+                         paragraph_ids, paragraph_tags, paragraph_index, paragraph_number_value,
+                         self.sep_special, self.sep_normal, self.question_length_limit,
+                         self.passage_length_limit, self.max_pieces)
 
         answer_dict = {"answer_type": answer_type, "answer": answer, "scale": scale, "answer_from": answer_from,
                        "gold_op": gold_op, "gold_scale":scale}
@@ -958,7 +963,7 @@ class TagTaTQATestReader(object):
 
     def _read(self, file_path: str):
         print("Reading file at %s", file_path)
-        with open(file_path) as dataset_file:
+        with open(file_path, encoding="utf8") as dataset_file:
             dataset = json.load(dataset_file)
         print("Reading the tatqa dataset")
         instances = []

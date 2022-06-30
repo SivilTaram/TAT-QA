@@ -64,6 +64,8 @@ def main():
         bert_model = RobertaModel.from_pretrained(args.roberta_model)
     elif args.encoder == 'finbert':
         bert_model = BertModel.from_pretrained(args.finbert_model)
+    elif args.encoder == 'tapex':
+        bert_model = RobertaModel.from_pretrained('dataset_tagop/tapex.large')
 
     if args.ablation_mode == 0:
         operators = OPERATOR_CLASSES_
@@ -125,6 +127,7 @@ def main():
             model.save(save_prefix, epoch)
             best_result = metrics["f1"]
             logger.info("Best eval F1 {} at epoch {}.\r\n".format(best_result, epoch))
+
 
 if __name__ == "__main__":
     main()
